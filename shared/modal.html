@@ -1,25 +1,95 @@
 <!-- Success Notification Modal -->
 <div id="successModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-content" tabindex="-1">
+        <!-- Modal Header with Icon -->
         <div class="modal-header" aria-hidden="true">
-            <i class="fas fa-check-circle" aria-hidden="true"></i>
+            <div class="modal-icon-wrapper success">
+                <i class="fas fa-check-circle" aria-hidden="true"></i>
+            </div>
         </div>
-        <h3 id="modalTitle">Order Saved Successfully! ✓</h3>
-        <p>Thank you for your order! Your order has been saved to our system.</p>
-
-        <div class="modal-contact">
-            <p><strong>Order Details</strong></p>
-            <div class="modal-order-row"><strong>Order ID:</strong> <span id="modalOrderId">—</span></div>
-            <div class="modal-order-row"><strong>Product:</strong> <span id="modalBase">Plain Classic</span></div>
-            <div class="modal-order-row"><strong>Topping:</strong> <span id="modalTopping">None</span> <em id="modalToppingPrice">(₱0.00)</em></div>
-            <div class="modal-order-row"><strong>Unit Price:</strong> <span id="modalUnitPrice">₱25.00</span></div>
-            <div class="modal-order-row"><strong>Quantity:</strong> <span id="modalQuantity">1</span></div>
-            <div class="modal-order-row"><strong>Pickup/Delivery:</strong> <span id="modalPickupDate">—</span></div>
-            <div class="modal-divider"></div>
-            <div class="modal-order-row total"><strong>Total:</strong> <span id="modalTotalPrice">₱25.00</span></div>
-            <p>We'll contact you within 24 hours via your phone number or Facebook account to confirm final details and payment.</p>
+        
+        <!-- Modal Title & Message -->
+        <div class="modal-body">
+            <h2 id="modalTitle" class="modal-title">🎉 Order Saved Successfully!</h2>
+            <p class="modal-subtitle">Your order has been received and saved to our system. Thank you for choosing GleeJeYly!</p>
+            
+            <!-- Order Details Section -->
+            <div class="modal-contact">
+                <h3 class="modal-section-title">📋 Order Details</h3>
+                
+                <div class="order-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Order ID:</span>
+                        <span class="detail-value" id="modalOrderId">—</span>
+                        <button class="copy-btn" onclick="copyToClipboard('modalOrderId')" title="Copy Order ID">
+                            <i class="fas fa-copy" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <span class="detail-label">Product:</span>
+                        <span class="detail-value" id="modalBase">Plain Classic</span>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <span class="detail-label">Topping:</span>
+                        <span class="detail-value">
+                            <span id="modalTopping">None</span>
+                            <em id="modalToppingPrice" class="price-note">(₱0.00)</em>
+                        </span>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <span class="detail-label">Unit Price:</span>
+                        <span class="detail-value" id="modalUnitPrice">₱250.00</span>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <span class="detail-label">Quantity:</span>
+                        <span class="detail-value" id="modalQuantity">1</span>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <span class="detail-label">Pickup/Delivery:</span>
+                        <span class="detail-value" id="modalPickupDate">—</span>
+                    </div>
+                </div>
+                
+                <!-- Total Price -->
+                <div class="modal-divider"></div>
+                <div class="order-total">
+                    <span class="total-label">Total Amount:</span>
+                    <span class="total-value" id="modalTotalPrice">₱250.00</span>
+                </div>
+                
+                <!-- Next Steps -->
+                <div class="modal-next-steps">
+                    <h4 class="next-steps-title">📱 What's Next?</h4>
+                    <p class="next-steps-text">We'll contact you within <strong>24 hours</strong> via:</p>
+                    <ul class="next-steps-list">
+                        <li><i class="fas fa-check" aria-hidden="true"></i> Phone Call</li>
+                        <li><i class="fas fa-check" aria-hidden="true"></i> Facebook Message</li>
+                        <li><i class="fas fa-check" aria-hidden="true"></i> Confirm final details & payment</li>
+                    </ul>
+                </div>
+            </div>
         </div>
-
-        <button id="closeModalBtn" class="btn btn-modal" aria-label="Close order confirmation">Close</button>
+        
+        <!-- Modal Actions -->
+        <div class="modal-actions">
+            <button id="closeModalBtn" class="btn btn-primary" aria-label="Close order confirmation">
+                <i class="fas fa-home" aria-hidden="true"></i>
+                Back to Home
+            </button>
+            <button id="newOrderBtn" class="btn btn-secondary" aria-label="Place another order">
+                <i class="fas fa-plus" aria-hidden="true"></i>
+                New Order
+            </button>
+        </div>
+        
+        <!-- Close Button (top right) -->
+        <button class="modal-close" id="modalCloseX" aria-label="Close dialog">
+            <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
     </div>
 </div>

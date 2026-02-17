@@ -1,0 +1,250 @@
+/* Accessibility & UX Enhancements */
+
+/* Focus styles for keyboard navigation */
+*:focus-visible {
+  outline: 3px solid #E8704F;
+  outline-offset: 2px;
+}
+
+/* Skip to main link */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #E8704F;
+  color: white;
+  padding: 8px 16px;
+  text-decoration: none;
+  z-index: 100;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Loading bar animation */
+.loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(to right, #E8704F, #FF9D5C);
+  width: 0;
+  z-index: 9999;
+  animation: progress 2.5s ease;
+}
+
+@keyframes progress {
+  0% { width: 10%; }
+  50% { width: 60%; }
+  100% { width: 100%; opacity: 0; }
+}
+
+/* Toast notifications with accessibility */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #333;
+  color: white;
+  padding: 16px 24px;
+  border-radius: 8px;
+  z-index: 1000;
+  opacity: 0;
+  transform: translateY(100px);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-width: 300px;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-success {
+  background: #4CAF50;
+}
+
+.toast-error {
+  background: #f44336;
+}
+
+.toast-warning {
+  background: #FF9800;
+}
+
+.toast-info {
+  background: #2196F3;
+}
+
+/* Update banner */
+.update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #E8704F;
+  color: white;
+  padding: 16px;
+  z-index: 999;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  opacity: 0;
+  transform: translateY(-100%);
+  transition: all 0.3s ease;
+}
+
+.update-banner.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.update-banner button {
+  background: white;
+  color: #E8704F;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.update-banner button:hover {
+  background: #f5f5f5;
+}
+
+/* Form enhancements */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: #E8704F;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(232, 112, 79, 0.1);
+}
+
+.form-group input:invalid,
+.form-group input[aria-invalid="true"] {
+  border-color: #f44336;
+}
+
+.error-msg {
+  display: block;
+  color: #f44336;
+  font-size: 12px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+/* Ensure min touch target size */
+button,
+a,
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Mobile menu accessibility */
+.mobile-menu-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-menu-btn[aria-expanded="true"] {
+  color: #E8704F;
+}
+
+/* Smooth scrolling for reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  *:focus-visible {
+    outline-width: 4px;
+  }
+  
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    border-width: 3px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .toast {
+    background: #222;
+  }
+  
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    background: #1a1a1a;
+    color: #fff;
+  }
+}
+
+/* Lazy loaded images */
+img[data-src] {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+img[data-src].loaded {
+  animation: none;
+  background: none;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* App ready state */
+html:not(.app-ready) {
+  opacity: 0.95;
+}
+
+html.app-ready {
+  opacity: 1;
+}

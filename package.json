@@ -4,5 +4,28 @@
   "description": "GleeJeYly - Jelly Cheesecake Ordering System (Frontend)",
   "keywords": ["cheesecake", "jelly", "ordering"],
   "author": "GleeJeYly",
-  "license": "MIT"
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "node server/index.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node server/index.js",
+    "server": "node server/index.js",
+    "optimize": "node build.cjs"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "vite-plugin-pwa": "^0.17.0",
+    "terser": "^5.26.0",
+    "rollup-plugin-visualizer": "^4.2.1",
+    "concurrently": "^8.2.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "workbox-window": "^7.0.0"
+  }
 }

@@ -1,21 +1,55 @@
-<header id="header">
+<header id="header" role="banner">
     <div class="container header-container">
-            <a href="index.html" class="logo" aria-label="GleeJeYly Home">
-            <img src="images/logo.svg" alt="GleeJeYly Logo" class="logo-image" width="48" height="48" loading="eager">
+        <!-- Logo/Brand -->
+        <div class="logo-section">
+            <a href="index.html" class="logo" aria-label="GleeJeYly Home - Premium Jelly Cheesecake">
+                <span class="logo-icon">🍰</span>
+                <span class="logo-text">
+                    <span class="logo-title">GleeJeYly</span>
+                    <span class="logo-subtitle">Premium Cheesecake</span>
+                </span>
             </a>
+        </div>
+        
+        <!-- Mobile Menu Button -->
         <button class="mobile-menu-btn" id="mobileMenuBtn" aria-expanded="false" aria-controls="navMenu">
-            <span class="sr-only">Menu</span>
-            <i class="fas fa-bars"></i>
+            <span class="sr-only">Toggle Menu</span>
+            <i class="fas fa-bars" aria-hidden="true"></i>
+            <i class="fas fa-times" aria-hidden="true" style="display:none;"></i>
         </button>
-        <nav aria-label="Main Navigation">
-            <ul id="navMenu">
-                <li><a href="index.html">Home</a></li>
+        
+        <!-- Navigation -->
+        <nav aria-label="Main Navigation" class="header-nav">
+            <ul id="navMenu" class="nav-menu">
+                <li><a href="index.html" aria-current="page">Home</a></li>
                 <li><a href="product.html">Product</a></li>
-                <li><a href="order.html" class="btn">Order Now</a></li>
                 <li><a href="reviews.html">Reviews</a></li>
                 <li><a href="faq.html">FAQ</a></li>
                 <li><a href="contact.html">Contact</a></li>
+                <li class="nav-cta"><a href="order.html" class="btn btn-primary">Order Now</a></li>
             </ul>
         </nav>
+        
+        <!-- Header Actions -->
+        <div class="header-actions">
+            <button id="themeToggle" class="icon-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <i class="fas fa-moon" aria-hidden="true"></i>
+            </button>
+            <a href="order.html" class="btn btn-primary" aria-label="Order Jelly Cheesecake">
+                <i class="fas fa-shopping-cart" aria-hidden="true"></i>
+                Order
+            </a>
+        </div>
+    </div>
+    
+    <!-- Announcement Banner -->
+    <div class="announcement-banner" id="announcementBanner" role="region" aria-live="polite" aria-atomic="true">
+        <div class="container">
+            <i class="fas fa-info-circle" aria-hidden="true"></i>
+            <span>📦 Free delivery for orders above ₱500! Limited time offer.</span>
+            <button class="close-banner" id="closeBanner" aria-label="Close announcement">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
     </div>
 </header>
