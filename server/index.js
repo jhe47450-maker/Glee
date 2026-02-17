@@ -25,6 +25,13 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Serve static files from dist/ (Replit full-stack deployment)
+const distDir = path.join(__dirname, '..', 'dist');
+app.use(express.static(distDir, {
+  maxAge: '1h',
+  etag: false
+}));
+
 // Data paths
 const dataDir = path.join(__dirname, 'server', 'data');
 const ordersFile = path.join(dataDir, 'orders.json');
@@ -321,6 +328,11 @@ app.delete('/api/reviews/:id', async (req, res) => {
     console.error('Error deleting review:', error);
     res.status(500).json({ error: 'Failed to delete review' });
   }
+});
+
+// SPA fallback - serve index.html for non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(distDir, 'index.html'));
 });
 
 // Error handling

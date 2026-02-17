@@ -1,7 +1,7 @@
 // Configuration constants - centralized
 export const CONFIG = {
-  // API Base - use environment variable or default to Railway
-  API_BASE: import.meta.env.VITE_API_BASE || 'http://localhost:5000/api',
+  // API Base - Automatically detect environment
+  API_BASE: getAPIBase(),
   REQUEST_TIMEOUT: 10000,
   PRODUCT_PRICE: 25.00,
   TOPPING_PRICES: {
@@ -21,6 +21,38 @@ export const CONFIG = {
     ANIMATION: 300
   }
 };
+
+// Get API Base URL based on environment
+function getAPIBase() {
+  // 1. Check environment variable (build-time)
+  if (import.meta.env.VITE_API_BASE) {
+    return import.meta.env.VITE_API_BASE;
+  }
+
+  // 2. Check if running on Replit
+  if (window.location.hostname.includes('replit.dev')) {
+    return `${window.location.origin}/api`;
+  }
+
+  // 3. Check if running on GitHub Pages
+  if (window.location.hostname.includes('github.io')) {
+    // GitHub Pages frontend might have backend elsewhere
+    return import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
+  }
+
+  // 4. Check for running on Vercel
+  if (window.location.hostname.includes('vercel.app')) {
+    return `${window.location.origin}/api`;
+  }
+
+  // 5. Local development
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:5000/api';
+  }
+
+  // 6. Fallback
+  return `${window.location.origin}/api`;
+}
 
 // Feature detection
 export const FEATURES = {
