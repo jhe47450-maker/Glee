@@ -19,6 +19,13 @@ import {
   backupToJSON,
   closeDatabase
 } from './db.js';
+import logger, { requestLogger } from './logger.js';
+import {
+  validateOrderData,
+  validateReviewData,
+  validatePagination,
+  validateOrderStatus
+} from './validators.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,7 +46,8 @@ app.use(cors({
   ].filter(Boolean),
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+app.use(requestLogger);
 
 // Serve static files from dist/ (Replit full-stack deployment)
 const distDir = path.join(__dirname, '..', 'dist');
@@ -70,19 +78,36 @@ app.get('/health', (req, res) => {
  * GET /api/orders - Get all orders with optional filtering
  * Query params: status, limit, offset
  */
-app.get('/api/orders', (req, res) => {
+app.get('/api/orders', async (req, res) => {
   try {
     const { status, limit, offset } = req.query;
-    const options = {};
+    
+    // Validate pagination
+    const paginationVal = validatePagination(limit, offset);
+    if (!paginationVal.valid) {
+      logger.validationError('Invalid pagination', { error: paginationVal.error });
+      return res.status(400).json({ error: paginationVal.error });
+    }
 
-    if (status) options.status = status;
-    if (limit) options.limit = parseInt(limit);
-    if (offset) options.offset = parseInt(offset);
+    const options = {
+      limit: paginationVal.limit,
+      offset: paginationVal.offset
+    };
 
-    const orders = getAllOrders(options);
+    if (status) {
+      const statusVal = validateOrderStatus(status);
+      if (!statusVal.valid) {
+        logger.validationError('Invalid status', { error: statusVal.error });
+        return res.status(400).json({ error: statusVal.error });
+      }
+      options.status = statusVal.value;
+    }
+
+    const orders = await getAllOrders(options);
+    logger.endpoint('GET', '/api/orders', 200, { count: orders.length });
     res.json(orders);
   } catch (error) {
-    console.error('Error reading orders:', error);
+    logger.error('Error reading orders', { error: error.message });
     res.status(500).json({ error: 'Failed to read orders' });
   }
 });
@@ -90,12 +115,17 @@ app.get('/api/orders', (req, res) => {
 /**
  * GET /api/orders/search/:phone - Get orders by phone number
  */
-app.get('/api/orders/search/:phone', (req, res) => {
+app.get('/api/orders/search/:phone', async (req, res) => {
   try {
-    const orders = getOrdersByPhone(req.params.phone);
+    if (!req.params.phone || req.params.phone.length < 5) {
+      logger.validationError('Invalid phone', { error: 'Phone must be at least 5 characters' });
+      return res.status(400).json({ error: 'Phone number must be at least 5 characters' });
+    }
+
+    const orders = await getOrdersByPhone(req.params.phone);
     res.json(orders);
   } catch (error) {
-    console.error('Error searching orders:', error);
+    logger.error('Error searching orders', { error: error.message });
     res.status(500).json({ error: 'Failed to search orders' });
   }
 });
@@ -103,17 +133,19 @@ app.get('/api/orders/search/:phone', (req, res) => {
 /**
  * GET /api/orders/:id - Get single order by ID
  */
-app.get('/api/orders/:id', (req, res) => {
+app.get('/api/orders/:id', async (req, res) => {
   try {
-    const order = getOrderById(req.params.id);
-    
+    if (!req.params.id) {
+      return res.status(400).json({ error: 'Order ID is required' });
+    }
+
+    const order = await getOrderById(req.params.id);
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
-    
     res.json(order);
   } catch (error) {
-    console.error('Error reading order:', error);
+    logger.error('Error reading order', { error: error.message, id: req.params.id });
     res.status(500).json({ error: 'Failed to read order' });
   }
 });
@@ -121,38 +153,29 @@ app.get('/api/orders/:id', (req, res) => {
 /**
  * POST /api/orders - Create new order
  */
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', async (req, res) => {
   try {
-    const {
-      full_name,
-      phone_number,
-      address,
-      quantity,
-      toppings,
-      total_price,
-      special_instructions,
-      order_date,
-      delivery_date
-    } = req.body;
+    // Validate request data
+    const validation = validateOrderData(req.body);
 
-    // Validation
-    if (!full_name || !phone_number || !address || !quantity) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!validation.valid) {
+      logger.validationError('Invalid order data', validation.errors);
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: validation.errors
+      });
     }
 
-    const newOrder = createOrder({
+    // Create order with validated data
+    const newOrder = await createOrder({
       id: `ORD-${Date.now()}`,
-      full_name,
-      phone_number,
-      address,
-      quantity,
-      toppings,
-      total_price,
-      special_instructions,
-      order_date,
-      delivery_date,
+      ...validation.data,
+      order_date: req.body.order_date || new Date().toISOString(),
+      delivery_date: req.body.delivery_date || null,
       status: 'pending'
     });
+
+    logger.endpoint('POST', '/api/orders', 201, { id: newOrder.id, customer: newOrder.full_name });
 
     res.status(201).json({
       success: true,
@@ -160,9 +183,10 @@ app.post('/api/orders', (req, res) => {
       order: newOrder
     });
   } catch (error) {
-    console.error('Error creating order:', error);
-    res.status(400).json({
-      error: error.message || 'Failed to create order'
+    logger.error('Error creating order', { error: error.message });
+    res.status(500).json({
+      error: 'Failed to create order',
+      message: process.env.NODE_ENV !== 'production' ? error.message : undefined
     });
   }
 });
@@ -170,9 +194,37 @@ app.post('/api/orders', (req, res) => {
 /**
  * PUT /api/orders/:id - Update order
  */
-app.put('/api/orders/:id', (req, res) => {
+app.put('/api/orders/:id', async (req, res) => {
   try {
-    const updatedOrder = updateOrder(req.params.id, req.body);
+    if (!req.params.id) {
+      return res.status(400).json({ error: 'Order ID is required' });
+    }
+
+    // Validate only provided fields
+    const allowedFields = ['status', 'delivery_date', 'special_instructions', 'quantity', 'total_price'];
+    const updateData = {};
+
+    for (const field of allowedFields) {
+      if (field in req.body) {
+        updateData[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    if (updateData.status) {
+      const statusVal = validateOrderStatus(updateData.status);
+      if (!statusVal.valid) {
+        logger.validationError('Invalid status', { error: statusVal.error });
+        return res.status(400).json({ error: statusVal.error });
+      }
+      updateData.status = statusVal.value;
+    }
+
+    const updatedOrder = await updateOrder(req.params.id, updateData);
+    logger.endpoint('PUT', `/api/orders/:id`, 200, { id: req.params.id });
 
     res.json({
       success: true,
@@ -180,7 +232,7 @@ app.put('/api/orders/:id', (req, res) => {
       order: updatedOrder
     });
   } catch (error) {
-    console.error('Error updating order:', error);
+    logger.error('Error updating order', { error: error.message, id: req.params.id });
     const statusCode = error.message === 'Order not found' ? 404 : 400;
     res.status(statusCode).json({
       error: error.message || 'Failed to update order'
@@ -191,16 +243,21 @@ app.put('/api/orders/:id', (req, res) => {
 /**
  * DELETE /api/orders/:id - Delete order
  */
-app.delete('/api/orders/:id', (req, res) => {
+app.delete('/api/orders/:id', async (req, res) => {
   try {
-    deleteOrder(req.params.id);
+    if (!req.params.id) {
+      return res.status(400).json({ error: 'Order ID is required' });
+    }
+
+    await deleteOrder(req.params.id);
+    logger.endpoint('DELETE', `/api/orders/:id`, 200, { id: req.params.id });
 
     res.json({
       success: true,
       message: 'Order deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting order:', error);
+    logger.error('Error deleting order', { error: error.message, id: req.params.id });
     const statusCode = error.message === 'Order not found' ? 404 : 400;
     res.status(statusCode).json({
       error: error.message || 'Failed to delete order'
@@ -216,19 +273,36 @@ app.delete('/api/orders/:id', (req, res) => {
  * GET /api/reviews - Get all reviews with optional filtering
  * Query params: minRating, limit, offset
  */
-app.get('/api/reviews', (req, res) => {
+app.get('/api/reviews', async (req, res) => {
   try {
     const { minRating, limit, offset } = req.query;
-    const options = {};
+    
+    // Validate pagination
+    const paginationVal = validatePagination(limit, offset);
+    if (!paginationVal.valid) {
+      logger.validationError('Invalid pagination', { error: paginationVal.error });
+      return res.status(400).json({ error: paginationVal.error });
+    }
 
-    if (minRating) options.minRating = parseInt(minRating);
-    if (limit) options.limit = parseInt(limit);
-    if (offset) options.offset = parseInt(offset);
+    const options = {
+      limit: paginationVal.limit,
+      offset: paginationVal.offset
+    };
 
-    const reviews = getAllReviews(options);
+    if (minRating) {
+      const r = parseInt(minRating);
+      if (isNaN(r) || r < 1 || r > 5) {
+        logger.validationError('Invalid rating', { error: 'Rating must be between 1 and 5' });
+        return res.status(400).json({ error: 'Rating must be between 1 and 5' });
+      }
+      options.minRating = r;
+    }
+
+    const reviews = await getAllReviews(options);
+    logger.endpoint('GET', '/api/reviews', 200, { count: reviews.length });
     res.json(reviews);
   } catch (error) {
-    console.error('Error reading reviews:', error);
+    logger.error('Error reading reviews', { error: error.message });
     res.status(500).json({ error: 'Failed to read reviews' });
   }
 });
@@ -236,17 +310,19 @@ app.get('/api/reviews', (req, res) => {
 /**
  * GET /api/reviews/:id - Get single review by ID
  */
-app.get('/api/reviews/:id', (req, res) => {
+app.get('/api/reviews/:id', async (req, res) => {
   try {
-    const review = getReviewById(req.params.id);
-    
+    if (!req.params.id) {
+      return res.status(400).json({ error: 'Review ID is required' });
+    }
+
+    const review = await getReviewById(req.params.id);
     if (!review) {
       return res.status(404).json({ error: 'Review not found' });
     }
-    
     res.json(review);
   } catch (error) {
-    console.error('Error reading review:', error);
+    logger.error('Error reading review', { error: error.message, id: req.params.id });
     res.status(500).json({ error: 'Failed to read review' });
   }
 });
@@ -254,31 +330,27 @@ app.get('/api/reviews/:id', (req, res) => {
 /**
  * POST /api/reviews - Create new review
  */
-app.post('/api/reviews', (req, res) => {
+app.post('/api/reviews', async (req, res) => {
   try {
-    const {
-      reviewer_name,
-      review_text,
-      rating,
-      date
-    } = req.body;
+    // Validate request data
+    const validation = validateReviewData(req.body);
 
-    // Validation
-    if (!reviewer_name || !review_text || !rating) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!validation.valid) {
+      logger.validationError('Invalid review data', validation.errors);
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: validation.errors
+      });
     }
 
-    if (rating < 1 || rating > 5) {
-      return res.status(400).json({ error: 'Rating must be between 1 and 5' });
-    }
-
-    const newReview = createReview({
+    // Create review with validated data
+    const newReview = await createReview({
       id: `REV-${Date.now()}`,
-      reviewer_name,
-      review_text,
-      rating,
-      date
+      ...validation.data,
+      date: req.body.date || new Date().toISOString()
     });
+
+    logger.endpoint('POST', '/api/reviews', 201, { id: newReview.id, rating: newReview.rating });
 
     res.status(201).json({
       success: true,
@@ -286,9 +358,10 @@ app.post('/api/reviews', (req, res) => {
       review: newReview
     });
   } catch (error) {
-    console.error('Error creating review:', error);
-    res.status(400).json({
-      error: error.message || 'Failed to create review'
+    logger.error('Error creating review', { error: error.message });
+    res.status(500).json({
+      error: 'Failed to create review',
+      message: process.env.NODE_ENV !== 'production' ? error.message : undefined
     });
   }
 });
@@ -296,9 +369,23 @@ app.post('/api/reviews', (req, res) => {
 /**
  * PUT /api/reviews/:id - Update review
  */
-app.put('/api/reviews/:id', (req, res) => {
+app.put('/api/reviews/:id', async (req, res) => {
   try {
-    const updatedReview = updateReview(req.params.id, req.body);
+    if (!req.params.id) {
+      return res.status(400).json({ error: 'Review ID is required' });
+    }
+
+    // Only allow updating rating and review_text
+    const updateData = {};
+    if ('rating' in req.body) updateData.rating = req.body.rating;
+    if ('review_text' in req.body) updateData.review_text = req.body.review_text;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const updatedReview = await updateReview(req.params.id, updateData);
+    logger.endpoint('PUT', `/api/reviews/:id`, 200, { id: req.params.id });
 
     res.json({
       success: true,
@@ -306,7 +393,7 @@ app.put('/api/reviews/:id', (req, res) => {
       review: updatedReview
     });
   } catch (error) {
-    console.error('Error updating review:', error);
+    logger.error('Error updating review', { error: error.message, id: req.params.id });
     const statusCode = error.message === 'Review not found' ? 404 : 400;
     res.status(statusCode).json({
       error: error.message || 'Failed to update review'
@@ -317,16 +404,21 @@ app.put('/api/reviews/:id', (req, res) => {
 /**
  * DELETE /api/reviews/:id - Delete review
  */
-app.delete('/api/reviews/:id', (req, res) => {
+app.delete('/api/reviews/:id', async (req, res) => {
   try {
-    deleteReview(req.params.id);
+    if (!req.params.id) {
+      return res.status(400).json({ error: 'Review ID is required' });
+    }
+
+    await deleteReview(req.params.id);
+    logger.endpoint('DELETE', `/api/reviews/:id`, 200, { id: req.params.id });
 
     res.json({
       success: true,
       message: 'Review deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting review:', error);
+    logger.error('Error deleting review', { error: error.message, id: req.params.id });
     const statusCode = error.message === 'Review not found' ? 404 : 400;
     res.status(statusCode).json({
       error: error.message || 'Failed to delete review'
@@ -341,12 +433,12 @@ app.delete('/api/reviews/:id', (req, res) => {
 /**
  * GET /api/stats - Database statistics
  */
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', async (req, res) => {
   try {
-    const stats = getStats();
+    const stats = await getStats();
     res.json(stats);
   } catch (error) {
-    console.error('Error getting stats:', error);
+    logger.error('Error getting stats', { error: error.message });
     res.status(500).json({ error: 'Failed to get stats' });
   }
 });
@@ -354,12 +446,13 @@ app.get('/api/stats', (req, res) => {
 /**
  * GET /api/backup - Export database as JSON (for migration/backup)
  */
-app.get('/api/backup', (req, res) => {
+app.get('/api/backup', async (req, res) => {
   try {
-    const backup = backupToJSON();
+    const backup = await backupToJSON();
+    logger.endpoint('GET', '/api/backup', 200, { orders: backup.orders.length, reviews: backup.reviews.length });
     res.json(backup);
   } catch (error) {
-    console.error('Error creating backup:', error);
+    logger.error('Error creating backup', { error: error.message });
     res.status(500).json({ error: 'Failed to create backup' });
   }
 });
@@ -373,15 +466,28 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(distDir, 'index.html'));
 });
 
-// Error handling
+// Global error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+  const statusCode = err.statusCode || 500;
+  const isDev = process.env.NODE_ENV !== 'production';
+
+  logger.error(`${req.method} ${req.path}`, {
+    message: err.message,
+    stack: isDev ? err.stack : undefined
+  });
+
+  res.status(statusCode).json({
+    error: isDev ? err.message : 'Internal server error',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ error: 'Endpoint not found' });
+  res.status(404).json({
+    error: 'Endpoint not found',
+    path: req.path
+  });
 });
 
 // ============================================================================
@@ -393,68 +499,40 @@ let server;
 async function start() {
   try {
     // Initialize database
-    initializeDatabase();
+    await initializeDatabase();
 
     // Start server
     server = app.listen(PORT, () => {
-      console.log(`
-╔════════════════════════════════════════╗
-║   🍰 GleeJeYly Backend Server 🍰      ║
-╠════════════════════════════════════════╣
-║  Server: http://localhost:${PORT}            ║
-║  Status: http://localhost:${PORT}/health     ║
-║  Database: SQLite (server/database.sqlite) ║
-║  Node.js Version: ${process.version}        ║
-║  Environment: ${process.env.NODE_ENV || 'development'} ║
-╚════════════════════════════════════════╝
-
-📍 Available Endpoints:
-  ✅ GET  /health           - Server status
-  
-  📦 ORDERS:
-     GET  /api/orders       - List all orders
-     POST /api/orders       - Create order
-     GET  /api/orders/:id   - Get order
-     PUT  /api/orders/:id   - Update order
-     DELETE /api/orders/:id - Delete order
-     GET  /api/orders/search/:phone - Search by phone
-  
-  ⭐ REVIEWS:
-     GET  /api/reviews      - List all reviews
-     POST /api/reviews      - Create review
-     GET  /api/reviews/:id  - Get review
-     PUT  /api/reviews/:id  - Update review
-     DELETE /api/reviews/:id- Delete review
-  
-  📊 ADMIN:
-     GET  /api/stats        - Database statistics
-     GET  /api/backup       - Export to JSON
-
-🗄️  Database: SQLite (server/database.sqlite)
-    `);
+      logger.startup('GleeJeYly Backend Server Started! 🚀', {
+        'URL': `http://localhost:${PORT}`,
+        'Health Check': `http://localhost:${PORT}/health`,
+        'Database': 'SQLite (server/database.sqlite)',
+        'Node.js': process.version,
+        'Environment': process.env.NODE_ENV || 'development'
+      });
     });
 
     // Graceful shutdown
     process.on('SIGTERM', () => {
-      console.log('\n⏹️  SIGTERM signal received: closing HTTP server');
-      server.close(() => {
-        console.log('HTTP server closed');
-        closeDatabase();
+      logger.warn('SIGTERM signal received: closing HTTP server');
+      server.close(async () => {
+        logger.info('HTTP server closed');
+        await closeDatabase();
         process.exit(0);
       });
     });
 
     process.on('SIGINT', () => {
-      console.log('\n⏹️  SIGINT signal received: closing HTTP server');
-      server.close(() => {
-        console.log('HTTP server closed');
-        closeDatabase();
+      logger.warn('SIGINT signal received: closing HTTP server');
+      server.close(async () => {
+        logger.info('HTTP server closed');
+        await closeDatabase();
         process.exit(0);
       });
     });
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    closeDatabase();
+    logger.error('Failed to start server', { error: error.message });
+    await closeDatabase();
     process.exit(1);
   }
 }
