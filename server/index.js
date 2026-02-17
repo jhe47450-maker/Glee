@@ -1,8 +1,24 @@
 import express from 'express';
 import cors from 'cors';
-import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import {
+  initializeDatabase,
+  getAllOrders,
+  getOrderById,
+  createOrder,
+  updateOrder,
+  deleteOrder,
+  getOrdersByPhone,
+  getAllReviews,
+  getReviewById,
+  createReview,
+  updateReview,
+  deleteReview,
+  getStats,
+  backupToJSON,
+  closeDatabase
+} from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,70 +48,38 @@ app.use(express.static(distDir, {
   etag: false
 }));
 
-// Data paths
-const dataDir = path.join(__dirname, 'server', 'data');
-const ordersFile = path.join(dataDir, 'orders.json');
-const reviewsFile = path.join(dataDir, 'reviews.json');
+// ============================================================================
+// HEALTH CHECK
+// ============================================================================
 
-// Initialize data files
-async function initDataFiles() {
-  try {
-    await fs.mkdir(dataDir, { recursive: true });
-
-    // Create orders.json if doesn't exist
-    try {
-      await fs.access(ordersFile);
-    } catch {
-      await fs.writeFile(ordersFile, JSON.stringify([], null, 2));
-    }
-
-    // Create reviews.json if doesn't exist
-    try {
-      await fs.access(reviewsFile);
-    } catch {
-      await fs.writeFile(reviewsFile, JSON.stringify([], null, 2));
-    }
-  } catch (error) {
-    console.error('Error initializing data files:', error);
-  }
-}
-
-// Utility functions
-async function readOrders() {
-  try {
-    const data = await fs.readFile(ordersFile, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    return [];
-  }
-}
-
-async function writeOrders(orders) {
-  await fs.writeFile(ordersFile, JSON.stringify(orders, null, 2));
-}
-
-async function readReviews() {
-  try {
-    const data = await fs.readFile(reviewsFile, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    return [];
-  }
-}
-
-async function writeReviews(reviews) {
-  await fs.writeFile(reviewsFile, JSON.stringify(reviews, null, 2));
-}
-
-// Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    database: 'SQLite'
+  });
 });
 
-// API: Get all orders
-app.get('/api/orders', async (req, res) => {
+// ============================================================================
+// ORDERS API
+// ============================================================================
+
+/**
+ * GET /api/orders - Get all orders with optional filtering
+ * Query params: status, limit, offset
+ */
+app.get('/api/orders', (req, res) => {
   try {
-    const orders = await readOrders();
+    const { status, limit, offset } = req.query;
+    const options = {};
+
+    if (status) options.status = status;
+    if (limit) options.limit = parseInt(limit);
+    if (offset) options.offset = parseInt(offset);
+
+    const orders = getAllOrders(options);
     res.json(orders);
   } catch (error) {
     console.error('Error reading orders:', error);
@@ -103,14 +87,30 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 
-// API: Get single order
-app.get('/api/orders/:id', async (req, res) => {
+/**
+ * GET /api/orders/search/:phone - Get orders by phone number
+ */
+app.get('/api/orders/search/:phone', (req, res) => {
   try {
-    const orders = await readOrders();
-    const order = orders.find(o => o.id === req.params.id);
+    const orders = getOrdersByPhone(req.params.phone);
+    res.json(orders);
+  } catch (error) {
+    console.error('Error searching orders:', error);
+    res.status(500).json({ error: 'Failed to search orders' });
+  }
+});
+
+/**
+ * GET /api/orders/:id - Get single order by ID
+ */
+app.get('/api/orders/:id', (req, res) => {
+  try {
+    const order = getOrderById(req.params.id);
+    
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
+    
     res.json(order);
   } catch (error) {
     console.error('Error reading order:', error);
@@ -118,8 +118,10 @@ app.get('/api/orders/:id', async (req, res) => {
   }
 });
 
-// API: Create new order
-app.post('/api/orders', async (req, res) => {
+/**
+ * POST /api/orders - Create new order
+ */
+app.post('/api/orders', (req, res) => {
   try {
     const {
       full_name,
@@ -138,24 +140,19 @@ app.post('/api/orders', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const orders = await readOrders();
-    const newOrder = {
+    const newOrder = createOrder({
       id: `ORD-${Date.now()}`,
-      full_name: String(full_name).trim(),
-      phone_number: String(phone_number).trim(),
-      address: String(address).trim(),
-      quantity: parseInt(quantity),
-      toppings: Array.isArray(toppings) ? toppings : [],
-      total_price: parseFloat(total_price) || 0,
-      special_instructions: String(special_instructions || '').trim(),
-      order_date: order_date || new Date().toISOString(),
-      delivery_date: delivery_date || null,
-      status: 'pending',
-      created_at: new Date().toISOString()
-    };
-
-    orders.push(newOrder);
-    await writeOrders(orders);
+      full_name,
+      phone_number,
+      address,
+      quantity,
+      toppings,
+      total_price,
+      special_instructions,
+      order_date,
+      delivery_date,
+      status: 'pending'
+    });
 
     res.status(201).json({
       success: true,
@@ -164,30 +161,18 @@ app.post('/api/orders', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating order:', error);
-    res.status(500).json({ error: 'Failed to create order' });
+    res.status(400).json({
+      error: error.message || 'Failed to create order'
+    });
   }
 });
 
-// API: Update order
-app.put('/api/orders/:id', async (req, res) => {
+/**
+ * PUT /api/orders/:id - Update order
+ */
+app.put('/api/orders/:id', (req, res) => {
   try {
-    const orders = await readOrders();
-    const orderIndex = orders.findIndex(o => o.id === req.params.id);
-
-    if (orderIndex === -1) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    const updatedOrder = {
-      ...orders[orderIndex],
-      ...req.body,
-      id: orders[orderIndex].id, // Don't allow ID change
-      created_at: orders[orderIndex].created_at, // Don't allow creation time change
-      updated_at: new Date().toISOString()
-    };
-
-    orders[orderIndex] = updatedOrder;
-    await writeOrders(orders);
+    const updatedOrder = updateOrder(req.params.id, req.body);
 
     res.json({
       success: true,
@@ -196,21 +181,19 @@ app.put('/api/orders/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating order:', error);
-    res.status(500).json({ error: 'Failed to update order' });
+    const statusCode = error.message === 'Order not found' ? 404 : 400;
+    res.status(statusCode).json({
+      error: error.message || 'Failed to update order'
+    });
   }
 });
 
-// API: Delete order
-app.delete('/api/orders/:id', async (req, res) => {
+/**
+ * DELETE /api/orders/:id - Delete order
+ */
+app.delete('/api/orders/:id', (req, res) => {
   try {
-    const orders = await readOrders();
-    const filteredOrders = orders.filter(o => o.id !== req.params.id);
-
-    if (filteredOrders.length === orders.length) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    await writeOrders(filteredOrders);
+    deleteOrder(req.params.id);
 
     res.json({
       success: true,
@@ -218,14 +201,31 @@ app.delete('/api/orders/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error deleting order:', error);
-    res.status(500).json({ error: 'Failed to delete order' });
+    const statusCode = error.message === 'Order not found' ? 404 : 400;
+    res.status(statusCode).json({
+      error: error.message || 'Failed to delete order'
+    });
   }
 });
 
-// API: Get all reviews
-app.get('/api/reviews', async (req, res) => {
+// ============================================================================
+// REVIEWS API
+// ============================================================================
+
+/**
+ * GET /api/reviews - Get all reviews with optional filtering
+ * Query params: minRating, limit, offset
+ */
+app.get('/api/reviews', (req, res) => {
   try {
-    const reviews = await readReviews();
+    const { minRating, limit, offset } = req.query;
+    const options = {};
+
+    if (minRating) options.minRating = parseInt(minRating);
+    if (limit) options.limit = parseInt(limit);
+    if (offset) options.offset = parseInt(offset);
+
+    const reviews = getAllReviews(options);
     res.json(reviews);
   } catch (error) {
     console.error('Error reading reviews:', error);
@@ -233,8 +233,28 @@ app.get('/api/reviews', async (req, res) => {
   }
 });
 
-// API: Create review
-app.post('/api/reviews', async (req, res) => {
+/**
+ * GET /api/reviews/:id - Get single review by ID
+ */
+app.get('/api/reviews/:id', (req, res) => {
+  try {
+    const review = getReviewById(req.params.id);
+    
+    if (!review) {
+      return res.status(404).json({ error: 'Review not found' });
+    }
+    
+    res.json(review);
+  } catch (error) {
+    console.error('Error reading review:', error);
+    res.status(500).json({ error: 'Failed to read review' });
+  }
+});
+
+/**
+ * POST /api/reviews - Create new review
+ */
+app.post('/api/reviews', (req, res) => {
   try {
     const {
       reviewer_name,
@@ -252,18 +272,13 @@ app.post('/api/reviews', async (req, res) => {
       return res.status(400).json({ error: 'Rating must be between 1 and 5' });
     }
 
-    const reviews = await readReviews();
-    const newReview = {
+    const newReview = createReview({
       id: `REV-${Date.now()}`,
-      reviewer_name: String(reviewer_name).trim(),
-      review_text: String(review_text).trim(),
-      rating: parseInt(rating),
-      date: date || new Date().toISOString(),
-      created_at: new Date().toISOString()
-    };
-
-    reviews.push(newReview);
-    await writeReviews(reviews);
+      reviewer_name,
+      review_text,
+      rating,
+      date
+    });
 
     res.status(201).json({
       success: true,
@@ -272,30 +287,18 @@ app.post('/api/reviews', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating review:', error);
-    res.status(500).json({ error: 'Failed to create review' });
+    res.status(400).json({
+      error: error.message || 'Failed to create review'
+    });
   }
 });
 
-// API: Update review
-app.put('/api/reviews/:id', async (req, res) => {
+/**
+ * PUT /api/reviews/:id - Update review
+ */
+app.put('/api/reviews/:id', (req, res) => {
   try {
-    const reviews = await readReviews();
-    const reviewIndex = reviews.findIndex(r => r.id === req.params.id);
-
-    if (reviewIndex === -1) {
-      return res.status(404).json({ error: 'Review not found' });
-    }
-
-    const updatedReview = {
-      ...reviews[reviewIndex],
-      ...req.body,
-      id: reviews[reviewIndex].id,
-      created_at: reviews[reviewIndex].created_at,
-      updated_at: new Date().toISOString()
-    };
-
-    reviews[reviewIndex] = updatedReview;
-    await writeReviews(reviews);
+    const updatedReview = updateReview(req.params.id, req.body);
 
     res.json({
       success: true,
@@ -304,21 +307,19 @@ app.put('/api/reviews/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating review:', error);
-    res.status(500).json({ error: 'Failed to update review' });
+    const statusCode = error.message === 'Review not found' ? 404 : 400;
+    res.status(statusCode).json({
+      error: error.message || 'Failed to update review'
+    });
   }
 });
 
-// API: Delete review
-app.delete('/api/reviews/:id', async (req, res) => {
+/**
+ * DELETE /api/reviews/:id - Delete review
+ */
+app.delete('/api/reviews/:id', (req, res) => {
   try {
-    const reviews = await readReviews();
-    const filteredReviews = reviews.filter(r => r.id !== req.params.id);
-
-    if (filteredReviews.length === reviews.length) {
-      return res.status(404).json({ error: 'Review not found' });
-    }
-
-    await writeReviews(filteredReviews);
+    deleteReview(req.params.id);
 
     res.json({
       success: true,
@@ -326,9 +327,46 @@ app.delete('/api/reviews/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error deleting review:', error);
-    res.status(500).json({ error: 'Failed to delete review' });
+    const statusCode = error.message === 'Review not found' ? 404 : 400;
+    res.status(statusCode).json({
+      error: error.message || 'Failed to delete review'
+    });
   }
 });
+
+// ============================================================================
+// ADMIN API (Database Stats & Management)
+// ============================================================================
+
+/**
+ * GET /api/stats - Database statistics
+ */
+app.get('/api/stats', (req, res) => {
+  try {
+    const stats = getStats();
+    res.json(stats);
+  } catch (error) {
+    console.error('Error getting stats:', error);
+    res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
+/**
+ * GET /api/backup - Export database as JSON (for migration/backup)
+ */
+app.get('/api/backup', (req, res) => {
+  try {
+    const backup = backupToJSON();
+    res.json(backup);
+  } catch (error) {
+    console.error('Error creating backup:', error);
+    res.status(500).json({ error: 'Failed to create backup' });
+  }
+});
+
+// ============================================================================
+// SPA FALLBACK & ERROR HANDLING
+// ============================================================================
 
 // SPA fallback - serve index.html for non-API routes
 app.get('*', (req, res) => {
@@ -346,41 +384,81 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
-// Start server
+// ============================================================================
+// SERVER STARTUP & SHUTDOWN
+// ============================================================================
+
+let server;
+
 async function start() {
-  await initDataFiles();
-  app.listen(PORT, () => {
-    console.log(`
+  try {
+    // Initialize database
+    initializeDatabase();
+
+    // Start server
+    server = app.listen(PORT, () => {
+      console.log(`
 ╔════════════════════════════════════════╗
 ║   🍰 GleeJeYly Backend Server 🍰      ║
 ╠════════════════════════════════════════╣
 ║  Server: http://localhost:${PORT}            ║
 ║  Status: http://localhost:${PORT}/health     ║
+║  Database: SQLite (server/database.sqlite) ║
 ║  Node.js Version: ${process.version}        ║
 ║  Environment: ${process.env.NODE_ENV || 'development'} ║
 ╚════════════════════════════════════════╝
 
 📍 Available Endpoints:
-  GET  /health           - Server status
-  GET  /api/orders       - List all orders
-  POST /api/orders       - Create order
-  GET  /api/orders/:id   - Get order
-  PUT  /api/orders/:id   - Update order
-  DELETE /api/orders/:id - Delete order
+  ✅ GET  /health           - Server status
   
-  GET  /api/reviews      - List all reviews
-  POST /api/reviews      - Create review
-  PUT  /api/reviews/:id  - Update review
-  DELETE /api/reviews/:id- Delete review
+  📦 ORDERS:
+     GET  /api/orders       - List all orders
+     POST /api/orders       - Create order
+     GET  /api/orders/:id   - Get order
+     PUT  /api/orders/:id   - Update order
+     DELETE /api/orders/:id - Delete order
+     GET  /api/orders/search/:phone - Search by phone
+  
+  ⭐ REVIEWS:
+     GET  /api/reviews      - List all reviews
+     POST /api/reviews      - Create review
+     GET  /api/reviews/:id  - Get review
+     PUT  /api/reviews/:id  - Update review
+     DELETE /api/reviews/:id- Delete review
+  
+  📊 ADMIN:
+     GET  /api/stats        - Database statistics
+     GET  /api/backup       - Export to JSON
 
-📂 Data stored in: ${dataDir}
+🗄️  Database: SQLite (server/database.sqlite)
     `);
-  });
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('\n⏹️  SIGTERM signal received: closing HTTP server');
+      server.close(() => {
+        console.log('HTTP server closed');
+        closeDatabase();
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', () => {
+      console.log('\n⏹️  SIGINT signal received: closing HTTP server');
+      server.close(() => {
+        console.log('HTTP server closed');
+        closeDatabase();
+        process.exit(0);
+      });
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    closeDatabase();
+    process.exit(1);
+  }
 }
 
-start().catch(error => {
-  console.error('Failed to start server:', error);
-  process.exit(1);
-});
+start();
 
 export default app;

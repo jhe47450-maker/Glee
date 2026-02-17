@@ -58,9 +58,8 @@ Glee/
 │
 ├── Backend (Node.js Express)
 │   ├── server/index.js
-│   └── server/data/
-│       ├── orders.json
-│       └── reviews.json
+│   ├── server/db.js (SQLite database module)
+│   └── server/database.sqlite (SQLite database)
 │
 ├── Configuration
 │   ├── .replit (Replit config)
@@ -70,7 +69,8 @@ Glee/
 │
 └── Documentation
     ├── README.md (This file)
-    └── DEPLOYMENT.md (Full guide)
+    ├── DATABASE.md (Database guide) ⭐ NEW
+    └── DEPLOYMENT.md (Deployment guide)
 ```
 
 ---
@@ -97,9 +97,9 @@ npm run replit        # Build + start (automatic)
 
 | File | Purpose |
 |------|---------|
-| [DEPLOYMENT.md](DEPLOYMENT.md) | How to deploy on Replit + GitHub Pages |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Deployment guide for Replit + GitHub Pages |
+| [DATABASE.md](DATABASE.md) | SQLite database documentation ⭐ NEW |
 | [REPLIT_FULLSTACK.md](REPLIT_FULLSTACK.md) | Backend server details |
-| [REPLIT_QUICK_START.md](REPLIT_QUICK_START.md) | Quick 5-min guide |
 
 ---
 
@@ -111,9 +111,16 @@ POST   /api/orders       - Create new order
 GET    /api/orders/:id   - Get specific order
 PUT    /api/orders/:id   - Update order
 DELETE /api/orders/:id   - Delete order
+GET    /api/orders/search/:phone - Search by phone
 
 GET    /api/reviews      - List all reviews
 POST   /api/reviews      - Create review
+GET    /api/reviews/:id  - Get review
+PUT    /api/reviews/:id  - Update review
+DELETE /api/reviews/:id  - Delete review
+
+GET    /api/stats        - Database statistics ⭐ NEW
+GET    /api/backup       - Export data as JSON ⭐ NEW
 GET    /health           - Server status check
 ```
 
@@ -212,7 +219,7 @@ Instant updates           JSON database
 **Backend:**
 - Node.js v18+
 - Express.js
-- JSON file storage
+- SQLite database (fast, reliable)
 - REST API
 
 **Hosting:**
@@ -874,9 +881,9 @@ Share this link with anyone to let them order cheesecake! 🍰
 ## Development Notes
 
 - The frontend gracefully falls back to localStorage if the API is unavailable
-- All data is stored in JSON files in `server/data/`
+- All data is stored in **SQLite database** (`server/database.sqlite`)
 - The API is configured with CORS to allow requests from specific origins
-- Railway automatically manages environment variables and PORT configuration
+- Replit automatically manages environment variables and PORT configuration
 
 ## Security Features
 
@@ -936,15 +943,14 @@ When deploying to production:
 
 4. **Monitor Logs**: Check server logs for suspicious patterns
 
-5. **Database Backups**: Regularly backup `server/data/` files
+5. **Database Backups**: Use `/api/backup` endpoint to export data regularly
 
 6. **Rate Limiting**: Adjust `RATE_LIMIT` based on your traffic needs
 
 ### Known Limitations
 
 - No authentication/authorization (suitable for public submissions)
-- JSON file storage (not suitable for high-traffic production)
-- For enterprise use, migrate to a proper database with user authentication
+- For enterprise use with user accounts, add authentication backend
 
 ## License
 
