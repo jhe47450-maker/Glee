@@ -11,10 +11,7 @@
     "dev:server": "node server/index.js",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "build": "vite build",
-    "preview": "vite preview",
     "start": "node server/index.js",
-    "server": "node server/index.js",
-    "optimize": "node build.cjs",
     "replit": "npm run build && npm start"
   },
   "devDependencies": {
